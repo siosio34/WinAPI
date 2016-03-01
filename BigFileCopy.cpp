@@ -28,15 +28,24 @@ bool is_file_existsW(_In_ const wchar_t* file_path)
 		return true;
 
 }
+
+void close_map_context(_In_ pmap_context ctx)
+{
+	if (NULL != ctx)
+	{
+		if (NULL != ctx->view) UnmapViewOfFile(ctx->view);
+		if (NULL != ctx->map) CloseHandle(ctx->map);
+		if (INVALID_HANDLE_VALUE != ctx->handle) CloseHandle(ctx->handle);
+		free(ctx); ctx = NULL;
+	}
+}
+
 bool create_very_big_file()
 {
 	// current directory 를 구한다.
 	wchar_t *buf = NULL;
 	uint32_t buflen = 0;
 	buflen = GetCurrentDirectoryW(buflen, buf);
-
-	//pmap_context ctx = (pmap_context)malloc(sizeof(map_context));
-	//RtlZeroMemory(ctx, sizeof(map_context));
 
 	if (0 == buflen)
 	{
@@ -57,7 +66,7 @@ bool create_very_big_file()
 	if (!SUCCEEDED(StringCbPrintfW(
 		file_name,
 		sizeof(file_name),
-		L"%ws\\bob4.mil",
+		L"%ws\\bob4.mp3",
 		buf)))
 	{
 		printf("err ] can not create file name");
@@ -89,7 +98,6 @@ bool create_very_big_file()
 	int temp = 5;
 	LARGE_INTEGER file_size = { 0 };
 	uint32_t u32;
-	//uint32_t temp = (1024 * 1024 * 1024) * 4;
 	LONGLONG li;
 
 	do
@@ -172,7 +180,7 @@ bool MnIOCopy()
 	if (!SUCCEEDED(StringCbPrintfW(
 		file_path,
 		sizeof(file_path),
-		L"%ws\\bob4.mil",
+		L"%ws\\bob4.mp3",
 		buf)))
 	{
 		printf("err ] can not create file name");
@@ -227,7 +235,6 @@ bool MnIOCopy()
 
 		CloseHandle(ctx->handle); // 핸들을 다 사용했으므로 닫아준다.
 
-		
 		pmap_context ctx2 = (pmap_context)malloc(sizeof(map_context));
 		RtlZeroMemory(ctx2, sizeof(map_context));
 
@@ -235,7 +242,7 @@ bool MnIOCopy()
 		if (!SUCCEEDED(StringCbPrintfW(
 			file_name2,
 			sizeof(file_name2),
-			L"%ws\\bob43.mil",
+			L"%ws\\bob43.mp3",
 			buf)))
 		{
 			printf("err ] can not create file name");
@@ -252,7 +259,7 @@ bool MnIOCopy()
 		ctx2->handle = CreateFile(
 			(LPCWSTR)file_name2,
 			GENERIC_READ | GENERIC_WRITE,
-			FILE_SHARE_READ,
+			0,
 			NULL,
 			CREATE_ALWAYS,
 			FILE_ATTRIBUTE_NORMAL | FILE_FLAG_NO_BUFFERING,
@@ -265,13 +272,13 @@ bool MnIOCopy()
 			return false;
 		}
 
-		ctx2->size.QuadPart = qwFileOffset;
+		ctx2->size.QuadPart = qwFileSize;
 		ctx2->map = CreateFileMapping(
 			ctx2->handle,
 			NULL,
 			PAGE_READWRITE,
-			0,
-			(DWORD)(qwFileOffset & 0xFFFFFFFF),
+			ctx2->size.HighPart,
+			ctx2->size.LowPart,
 			NULL
 			);
 		
@@ -292,71 +299,33 @@ bool MnIOCopy()
 				(DWORD)(qwFileOffset & 0xFFFFFFFF), // 하위 오프셋
 				dwBytesInBlock);
 
-			ctx2->view = (PBYTE)MapViewOfFile(ctx2->map, FILE_MAP_COPY,
+			ctx2->view = (PBYTE)MapViewOfFile(ctx2->map, FILE_MAP_WRITE,
 				(DWORD)(qwFileOffset >> 32),  // 상위 오프셋
 				(DWORD)(qwFileOffset & 0xFFFFFFFF), // 하위 오프셋
 				dwBytesInBlock);
 
+			memcpy(ctx2->view, ctx->view, dwBytesInBlock);
+
+
 			//WriteFile(ctx2->handle, ctx->view, dwBytesInBlock, &bytes_written, NULL);
 			UnmapViewOfFile(ctx->view);
+			UnmapViewOfFile(ctx2->view);
 
 			qwFileOffset += dwBytesInBlock;
 			qwFileSize -= dwBytesInBlock;
 		}
-
-		//ctx2->view = (PBYTE)MapViewOfFile(ctx2->map, FILE_MAP_ALL_ACCESS,
-		//	0,  // 상위 오프셋
-		//	0, // 하위 오프셋
-		//	qwFileOffset);
-		//qwFileSize = qwFileOffset;
-		//qwFileOffset = 0;
-		//dwBytesInBlock = 1000 * sinf.dwAllocationGranularity;
-		//
-
-	//while (qwFileSize > 0)
-	//{
-	//	if (qwFileSize < dwBytesInBlock)
-	//		dwBytesInBlock = qwFileSize;
-	//
-	//	ctx2->view = (PBYTE)MapViewOfFile(ctx2->map, FILE_MAP_ALL_ACCESS,
-	//		(DWORD)(qwFileOffset >> 32),  // 상위 오프셋
-	//		(DWORD)(qwFileOffset & 0xFFFFFFFF), // 하위 오프셋
-	//		dwBytesInBlock);
-	//
-	//	qwFileOffset += dwBytesInBlock;
-	//	qwFileSize -= dwBytesInBlock;
-	//}
-
 		
 		ret = true;
-
 
 #pragma warning(default: 4127)
 
 	} while (false);
 
-	if (!ret)
-	{
-		if (NULL != ctx->view) UnmapViewOfFile(ctx->view);
-		if (NULL != ctx->map) CloseHandle(ctx->map);
-		if (INVALID_HANDLE_VALUE != ctx->handle) CloseHandle(ctx->handle);
+	if (!ret) close_map_context(ctx);
 
-		free(ctx); ctx = NULL;
-	}
 }
 
 
-
-void close_map_context(_In_ pmap_context ctx)
-{
-	if (NULL != ctx)
-	{
-		if (NULL != ctx->view) UnmapViewOfFile(ctx->view);
-		if (NULL != ctx->map) CloseHandle(ctx->map);
-		if (INVALID_HANDLE_VALUE != ctx->handle) CloseHandle(ctx->handle);
-		free(ctx);
-	}
-}
 
 bool file_save_Readfile()
 {
@@ -386,7 +355,7 @@ bool file_save_Readfile()
 	if (!SUCCEEDED(StringCbPrintfW(
 		src_file,
 		sizeof(src_file),
-		L"%ws\\bob4.mil",
+		L"%ws\\bob4.mp3",
 		buf)))
 	{
 		printf("err ] can not create file name");
@@ -397,7 +366,7 @@ bool file_save_Readfile()
 	if (!SUCCEEDED(StringCbPrintfW(
 		dst_file,
 		sizeof(dst_file),
-		L"%ws\\bob42.mil",
+		L"%ws\\bob42.mp3",
 		buf)))
 	{
 		printf("err ] can not create file name");
