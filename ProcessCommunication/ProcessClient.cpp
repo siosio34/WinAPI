@@ -7,27 +7,32 @@
 using namespace std;
 
 struct ForIPCCommunication {
-	char *view;
-	bool Direction;
+	char view[1024];
+	int Direction;
 };
-void WaitChat(int &_CheckDirection)
+
+void WaitChat(struct ForIPCCommunication *SharedMemory)
 {
 	bool check = true;
 	string ChatContent;
 	while (check) {
 		cin >> ChatContent;
-		_CheckDirection = 1;
+		StringCbPrintfA(SharedMemory->view, 1024, "%s", ChatContent.c_str());
+		SharedMemory->Direction = 1;
 	}
 }
 
-void CheckChatContent(int &_CheckDirection, ForIPCCommunication *_view)
+void CheckChatContent(struct ForIPCCommunication *SharedMemory)
 {
 	bool check = true;
-	while (check)
-	if (_CheckDirection == 0) {
-		fprintf(stdout, "%s \n", _view);
-		UnmapViewOfFile(_view);
-		break;
+	while (check) {
+		if (SharedMemory->Direction == 0) {
+
+			fprintf(stdout, "%s \n", SharedMemory->view);
+			SharedMemory->Direction = -1;
+			//UnmapViewOfFile(SharedMemory->view);
+			
+		}
 	}
 }
 
@@ -50,7 +55,7 @@ int main()
 	}
 
 	// MapViewOfFile() 호출 -> 섹션 객체 포인터를 얻어온다.
-	ForIPCCommunication* view = (ForIPCCommunication*)MapViewOfFile(
+	ForIPCCommunication* Shared = (ForIPCCommunication*)MapViewOfFile(
 		map,
 		FILE_MAP_ALL_ACCESS,
 		0,
@@ -58,20 +63,20 @@ int main()
 		1024
 		);
 
-	if (view == NULL)
+	Shared->Direction = -1;
+
+	if (Shared == NULL)
 	{
 		fwprintf(stderr, L"MapViewOfFile() failed.\n");
 		CloseHandle(map);
 		return -1;
 	}
 
+	std::thread t1(WaitChat, Shared);
+	std::thread t2(CheckChatContent, Shared);
 
+	t1.join();
+	t2.join();
 
-
-
-
-
-
-
-
+	return 0;
 }
